@@ -1,0 +1,14 @@
+{
+  "plugins": [
+    "transform-runtime"
+  ],
+  "presets": [
+    [
+      "env",
+      {
+        "node": "node:10.x"
+      }
+    ],
+    "stage-3"
+  ]
+}

@@ -1,0 +1,244 @@
+# Javascript Node CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-javascript/ for more details
+#
+version: 2
+jobs:
+  testdev:
+    docker:
+      # specify the version you desire here
+      - image: circleci/node:10.16.3
+
+    working_directory: ~/fe-ml-user-msisdn-verification
+
+    steps:
+      - checkout
+
+      - run:
+          name: create npmrc
+          command: echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > .npmrc
+
+      - run:
+          name: npm install
+          command: npm install
+      - run:
+          name: npm test
+          command: npm test
+
+  builddev:
+    docker:
+      # specify the version you desire here
+      - image: circleci/node:10.16.3
+
+    working_directory: ~/fe-ml-user-msisdn-verification
+
+    steps:
+      - checkout
+
+      - run:
+          name: create npmrc
+          command: echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > .npmrc
+
+      - run:
+          name: npm install
+          command: npm install
+
+      - save_cache:
+          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - ~/fe-ml-user-msisdn-verification
+
+  deploydev:
+    docker:
+      # specify the version you desire here
+      - image: circleci/node:10.16.3
+
+    working_directory: ~/fe-ml-user-msisdn-verification
+
+    steps:
+      - restore_cache:
+          keys:
+            - v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+
+      - run:
+          name: create npmrc
+          command: echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > ../.npmrc
+
+      - run: npm install --save-dev serverless@1.38.0
+
+      - run:
+          name: Deploy Master to AWS
+          command: export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} && export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} && ./node_modules/.bin/serverless deploy --stack=active -v
+
+  buildpp:
+    docker:
+      # specify the version you desire here
+      - image: circleci/node:10.16.3
+
+    working_directory: ~/fe-ml-user-msisdn-verification
+
+    steps:
+      - checkout
+
+      - run:
+          name: create npmrc
+          command: echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > .npmrc
+
+      - run:
+          name: npm install
+          command: npm install
+
+      - save_cache:
+          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - ~/fe-ml-user-msisdn-verification
+
+  deploypp:
+    docker:
+      # specify the version you desire here
+      - image: circleci/node:10.16.3
+
+    working_directory: ~/fe-ml-user-msisdn-verification
+
+    steps:
+      - restore_cache:
+          keys:
+            - v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+
+      - run:
+          name: create npmrc
+          command: echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > ../.npmrc
+
+      - run: npm install --save-dev serverless@1.38.0
+
+      - run:
+          name: update sls setting
+          command: >
+            sed -i -e 's/\(^\s*stage:\).*/\1 pp/' ./serverless.yml
+
+      - run:
+          name: Deploy Master to AWS
+          command: export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID_PP} && export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY_PP} && ./node_modules/.bin/serverless deploy --stack=active -v
+
+  buildprod:
+    docker:
+      # specify the version you desire here
+      - image: circleci/node:10.16.3
+
+    working_directory: ~/fe-ml-user-msisdn-verification
+
+    steps:
+      - checkout
+
+      - run:
+          name: create npmrc
+          command: echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > .npmrc
+
+      - run:
+          name: npm install
+          command: npm install
+
+      - save_cache:
+          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - ~/fe-ml-user-msisdn-verification
+
+  deployprod:
+    docker:
+      # specify the version you desire here
+      - image: circleci/node:10.16.3
+
+    working_directory: ~/fe-ml-user-msisdn-verification
+
+    steps:
+      - restore_cache:
+          keys:
+            - v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+
+      - run:
+          name: create npmrc
+          command: echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > ../.npmrc
+
+      - run: npm install --save-dev serverless@1.38.0
+
+      - run:
+          name: update sls setting
+          command: >
+            sed -i -e 's/\(^\s*stage:\).*/\1 prd/' ./serverless.yml
+
+      - run:
+          name: Deploy Master to AWS
+          command: export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID_PROD} && export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY_PROD} && ./node_modules/.bin/serverless deploy --stack=active -v
+
+workflows:
+  version: 2
+  build_and_deploy:
+    jobs:
+      - testdev:
+          filters:
+            tags:
+              ignore: /.*/
+            branches:
+              ignore: /^(release|master)$/
+
+      - builddev:
+          requires:
+            - testdev
+          filters:
+            tags:
+              ignore: /.*/
+            branches:
+              only: /^develop/
+
+      - deploydev:
+          requires:
+            - builddev
+          filters:
+            tags:
+              ignore: /.*/
+            branches:
+              only: /^develop/
+
+      - buildpp:
+          filters:
+            tags:
+              ignore: /.*/
+            branches:
+              only: /^release/
+
+      - deploypp:
+          requires:
+            - buildpp
+          filters:
+            tags:
+              ignore: /.*/
+            branches:
+              only: /^release/
+
+      - buildprod:
+          filters:
+            tags:
+              ignore: /.*/
+            branches:
+              only: /^master/
+
+      - approveprod:
+          type: approval
+          context: os-critical
+          requires:
+            - buildprod
+          filters:
+            tags:
+              ignore: /.*/
+            branches:
+              only: /^master/
+
+      - deployprod:
+          context: os-critical
+          requires:
+            - approveprod
+          filters:
+            tags:
+              ignore: /.*/
+            branches:
+              only: /^master/
